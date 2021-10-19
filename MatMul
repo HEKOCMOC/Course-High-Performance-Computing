@@ -1,0 +1,715 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "name": "Matrix_multiplication.ipynb",
+      "provenance": [],
+      "collapsed_sections": [],
+      "authorship_tag": "ABX9TyN61NTXqNmiAT3cFrs0TgHw",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "accelerator": "GPU"
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/HEKOCMOC/HPC_LAB/blob/main/MatMul\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "aJxmSgIyrYCZ",
+        "outputId": "a5a4ff10-8587-4df0-c15c-810dc0daf49a"
+      },
+      "source": [
+        "%pylab inline"
+      ],
+      "execution_count": 1,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Populating the interactive namespace from numpy and matplotlib\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "ghblHRqYMNDj",
+        "outputId": "11fd9fe8-4486-4263-9dc4-b3a6c0298a3d"
+      },
+      "source": [
+        "!pip install py-cpuinfo"
+      ],
+      "execution_count": 2,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Collecting py-cpuinfo\n",
+            "  Downloading py-cpuinfo-8.0.0.tar.gz (99 kB)\n",
+            "\u001b[?25l\r\u001b[K     |███▎                            | 10 kB 25.3 MB/s eta 0:00:01\r\u001b[K     |██████▋                         | 20 kB 26.6 MB/s eta 0:00:01\r\u001b[K     |█████████▉                      | 30 kB 12.1 MB/s eta 0:00:01\r\u001b[K     |█████████████▏                  | 40 kB 9.5 MB/s eta 0:00:01\r\u001b[K     |████████████████▍               | 51 kB 5.4 MB/s eta 0:00:01\r\u001b[K     |███████████████████▊            | 61 kB 5.9 MB/s eta 0:00:01\r\u001b[K     |███████████████████████         | 71 kB 5.7 MB/s eta 0:00:01\r\u001b[K     |██████████████████████████▎     | 81 kB 6.3 MB/s eta 0:00:01\r\u001b[K     |█████████████████████████████▌  | 92 kB 4.9 MB/s eta 0:00:01\r\u001b[K     |████████████████████████████████| 99 kB 3.5 MB/s \n",
+            "\u001b[?25hBuilding wheels for collected packages: py-cpuinfo\n",
+            "  Building wheel for py-cpuinfo (setup.py) ... \u001b[?25l\u001b[?25hdone\n",
+            "  Created wheel for py-cpuinfo: filename=py_cpuinfo-8.0.0-py3-none-any.whl size=22258 sha256=dab06f45edd60a76d6261caa5576097badbb07fbc64391b1dd924e2d36e56e31\n",
+            "  Stored in directory: /root/.cache/pip/wheels/d2/f1/1f/041add21dc9c4220157f1bd2bd6afe1f1a49524c3396b94401\n",
+            "Successfully built py-cpuinfo\n",
+            "Installing collected packages: py-cpuinfo\n",
+            "Successfully installed py-cpuinfo-8.0.0\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "o4HIVpUarbeb",
+        "outputId": "0ee5c22c-dc32-40c1-f302-7cd751314516"
+      },
+      "source": [
+        "import math\n",
+        "import numpy as np\n",
+        "from numba import cuda, jit, float64\n",
+        "import time\n",
+        "import pandas as pd\n",
+        "import cpuinfo \n",
+        "\n",
+        "print('CPU, выделенный на сервере Colab:', cpuinfo.get_cpu_info()['brand_raw'])\n",
+        "print('GPU, выделенный на сервере Colab:', cuda.get_current_device())"
+      ],
+      "execution_count": 3,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "CPU, выделенный на сервере Colab: Intel(R) Xeon(R) CPU @ 2.30GHz\n",
+            "GPU, выделенный на сервере Colab: <CUDA device 0 'b'Tesla K80''>\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "DoTH_1WItIvh"
+      },
+      "source": [
+        "N0 = 50\n",
+        "A0 = np.random.randn(N0, N0)\n",
+        "B0 = np.random.randn(N0, N0)\n",
+        "C0 = np.zeros((N0, N0))"
+      ],
+      "execution_count": 4,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "prJVLgbNZL1R"
+      },
+      "source": [
+        "N1 = 128\n",
+        "A1 = np.random.randn(N1, N1)\n",
+        "B1 = np.random.randn(N1, N1)\n",
+        "C1 = np.zeros((N1, N1))"
+      ],
+      "execution_count": 5,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "utiG3h5mZMrv"
+      },
+      "source": [
+        "N2 = 500\n",
+        "A2 = np.random.randn(N2, N2)\n",
+        "B2 = np.random.randn(N2, N2)\n",
+        "C2 = np.zeros((N2, N2))"
+      ],
+      "execution_count": 6,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "j5k9rj3AH7yj",
+        "outputId": "5465d4d8-9d72-4e4b-b40c-b2444f8f3695"
+      },
+      "source": [
+        "def CPU_matmul_dot(A, B):\n",
+        "  C = np.dot(A,B)\n",
+        "\n",
+        "s1 = time.time()\n",
+        "CPU_matmul_dot(A0, B0)\n",
+        "host_0 = C0\n",
+        "end0 = time.time() - s1\n",
+        "print(' -----------------------------------')\n",
+        "print('| Matmul on CPU (np.dot): {:.3f}'.format(end0), 'sec.|')\n",
+        "print(' -----------------------------------')\n",
+        "\n",
+        "s2 = time.time()\n",
+        "CPU_matmul_dot(A1, B1)\n",
+        "end1 = time.time() - s2\n",
+        "print(' -----------------------------------')\n",
+        "print('| Matmul on CPU (np.dot): {:.3f}'.format(end1), 'sec.|')\n",
+        "print(' -----------------------------------')\n",
+        "\n",
+        "s3 = time.time()\n",
+        "CPU_matmul_dot(A2, B2)\n",
+        "end2 = time.time() - s3\n",
+        "print(' -----------------------------------')\n",
+        "print('| Matmul on CPU (np.dot): {:.3f}'.format(end2), 'sec.|')\n",
+        "print(' -----------------------------------')"
+      ],
+      "execution_count": 7,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            " -----------------------------------\n",
+            "| Matmul on CPU (np.dot): 0.004 sec.|\n",
+            " -----------------------------------\n",
+            " -----------------------------------\n",
+            "| Matmul on CPU (np.dot): 0.003 sec.|\n",
+            " -----------------------------------\n",
+            " -----------------------------------\n",
+            "| Matmul on CPU (np.dot): 0.014 sec.|\n",
+            " -----------------------------------\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "0YdOpDiu8rkG",
+        "outputId": "c9dca66a-0284-4378-c71b-64f9fa6ac7b2"
+      },
+      "source": [
+        "def CPU_matmul(A, B, C):\n",
+        "  for i in range(C.shape[0]):\n",
+        "    for j in range(C.shape[1]):\n",
+        "      sum = 0\n",
+        "      for k in range(A.shape[1]):\n",
+        "        sum += A[i, k] * B[k, j]\n",
+        "      C[i, j] = sum\n",
+        "\n",
+        "host_1 = C0\n",
+        "\n",
+        "s4 = time.time()\n",
+        "CPU_matmul(A0, B0, C0)\n",
+        "end3 = time.time() - s4\n",
+        "print(' --------------------------')\n",
+        "print('| Matmul on CPU: {:.3f}'.format(end3), 'sec.|')\n",
+        "print(' --------------------------')\n",
+        "\n",
+        "s5 = time.time()\n",
+        "CPU_matmul(A1, B1, C1)\n",
+        "end4 = time.time() - s5\n",
+        "print(' --------------------------')\n",
+        "print('| Matmul on CPU: {:.3f}'.format(end4), 'sec.|')\n",
+        "print(' --------------------------')\n",
+        "\n",
+        "s6 = time.time()\n",
+        "CPU_matmul(A2, B2, C2)\n",
+        "end5 = time.time() - s6\n",
+        "print(' ---------------------------')\n",
+        "print('| Matmul on CPU: {:.3f}'.format(end5), 'sec.|')\n",
+        "print(' ---------------------------')"
+      ],
+      "execution_count": 8,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            " --------------------------\n",
+            "| Matmul on CPU: 0.113 sec.|\n",
+            " --------------------------\n",
+            " --------------------------\n",
+            "| Matmul on CPU: 1.429 sec.|\n",
+            " --------------------------\n",
+            " ---------------------------\n",
+            "| Matmul on CPU: 79.691 sec.|\n",
+            " ---------------------------\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "88SCFSHPu-1n",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "b9df189f-d30b-4665-e074-3226e279411b"
+      },
+      "source": [
+        "@jit\n",
+        "def CPU_matmul_jit(A, B, C):\n",
+        "  for i in range(C.shape[0]):\n",
+        "    for j in range(C.shape[1]):\n",
+        "      sum = 0\n",
+        "      for k in range(A.shape[1]):\n",
+        "        sum += A[i, k] * B[k, j]\n",
+        "      C[i, j] = sum\n",
+        "\n",
+        "host_2 = C0\n",
+        "\n",
+        "s7 = time.time()\n",
+        "CPU_matmul_jit(A0, B0, C0)\n",
+        "end6 = time.time() - s7\n",
+        "print(' --------------------------------')\n",
+        "print('| Matmul on CPU (jit): {:.3f}'.format(end6), 'sec.|')\n",
+        "print(' --------------------------------')\n",
+        "\n",
+        "s8 = time.time()\n",
+        "CPU_matmul_jit(A1, B1, C1)\n",
+        "end7 = time.time() - s8\n",
+        "print(' --------------------------------')\n",
+        "print('| Matmul on CPU (jit): {:.3f}'.format(end7), 'sec.|')\n",
+        "print(' --------------------------------')\n",
+        "\n",
+        "s9 = time.time()\n",
+        "CPU_matmul_jit(A2, B2, C2)\n",
+        "end8 = time.time() - s9\n",
+        "print(' --------------------------------')\n",
+        "print('| Matmul on CPU (jit): {:.3f}'.format(end8), 'sec.|')\n",
+        "print(' --------------------------------')"
+      ],
+      "execution_count": 9,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            " --------------------------------\n",
+            "| Matmul on CPU (jit): 0.467 sec.|\n",
+            " --------------------------------\n",
+            " --------------------------------\n",
+            "| Matmul on CPU (jit): 0.003 sec.|\n",
+            " --------------------------------\n",
+            " --------------------------------\n",
+            "| Matmul on CPU (jit): 0.182 sec.|\n",
+            " --------------------------------\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "qH8N7wDc1LdY",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "0c4d6d17-c434-44a3-c237-3c02469371ea"
+      },
+      "source": [
+        "@cuda.jit\n",
+        "def GPU_matmul_cuda_jit(A, B, C):\n",
+        "  i, j = cuda.grid(2)\n",
+        "  if i < C.shape[0] and j < C.shape[1]:\n",
+        "    sum = 0\n",
+        "    for k in range(A.shape[1]):\n",
+        "      sum += A[i, k] * B[k, j]\n",
+        "      C[i, j] = sum\n",
+        "\n",
+        "\n",
+        "def host_naive(A, B, C):\n",
+        "  d_A = cuda.to_device(A)\n",
+        "  d_B = cuda.to_device(B)\n",
+        "  d_C = cuda.device_array(C.shape, np.float64)\n",
+        "\n",
+        "  threadsperblock = (32, 32)\n",
+        "  blockspergrid_x = math.ceil(A.shape[0]/threadsperblock[0])\n",
+        "  blockspergrid_y = math.ceil(B.shape[1]/threadsperblock[1])\n",
+        "  blockspergrid = (blockspergrid_x, blockspergrid_y)\n",
+        "\n",
+        "  GPU_matmul_cuda_jit[blockspergrid, threadsperblock](d_A, d_B, d_C)\n",
+        "  return d_C.copy_to_host()\n",
+        "\n",
+        "\n",
+        "cuda.select_device(0) #выбор устройства GPU\n",
+        "s10 = time.time()\n",
+        "host_naive(A0, B0, C0)\n",
+        "host_3 = C0\n",
+        "end9 = time.time() - s10\n",
+        "print(' --------------------------')\n",
+        "print('| Matmul on GPU: {:.3f}'.format(end9), 'sec.|')\n",
+        "print(' --------------------------')\n",
+        "\n",
+        "cuda.select_device(0)\n",
+        "s11 = time.time()\n",
+        "host_naive(A1, B1, C1)\n",
+        "end10 = time.time() - s11\n",
+        "print(' --------------------------')\n",
+        "print('| Matmul on GPU: {:.3f}'.format(end10), 'sec.|')\n",
+        "print(' --------------------------')\n",
+        "\n",
+        "cuda.select_device(0)\n",
+        "s12 = time.time()\n",
+        "host_naive(A2, B2, C2)\n",
+        "end11 = time.time() - s12\n",
+        "print(' --------------------------')\n",
+        "print('| Matmul on GPU: {:.3f}'.format(end11), 'sec.|')\n",
+        "print(' --------------------------')"
+      ],
+      "execution_count": 10,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            " --------------------------\n",
+            "| Matmul on GPU: 0.573 sec.|\n",
+            " --------------------------\n",
+            " --------------------------\n",
+            "| Matmul on GPU: 0.005 sec.|\n",
+            " --------------------------\n",
+            " --------------------------\n",
+            "| Matmul on GPU: 0.065 sec.|\n",
+            " --------------------------\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "9k_JPhKi8dbb"
+      },
+      "source": [
+        "assert np.allclose(host_0, host_3)\n",
+        "assert np.allclose(host_1, host_3)\n",
+        "assert np.allclose(host_2, host_3)"
+      ],
+      "execution_count": 11,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "2F5BItNMKJaW",
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 421
+        },
+        "outputId": "0309ac00-2ce3-40e7-fed5-c4ec16c7f4f4"
+      },
+      "source": [
+        "timing_df = pd.DataFrame({'Name':['CPU', 'CPU(dot)', 'CPU(jit)' ,'GPU', 'CPU', 'CPU(dot)', 'CPU(jit)' ,'GPU', 'CPU', 'CPU(dot)', 'CPU(jit)' ,'GPU'], 'Time(s)':[end0, end3, end6, end9, end1, end4, end7, end10, end2, end5, end8, end11], 'Matrix size':[N0, N0, N0, N0, N1, N1, N1, N1, N2, N2, N2, N2]})\n",
+        "timing_df"
+      ],
+      "execution_count": 12,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/html": [
+              "<div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>Name</th>\n",
+              "      <th>Time(s)</th>\n",
+              "      <th>Matrix size</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>CPU</td>\n",
+              "      <td>0.004347</td>\n",
+              "      <td>50</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>CPU(dot)</td>\n",
+              "      <td>0.113307</td>\n",
+              "      <td>50</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>CPU(jit)</td>\n",
+              "      <td>0.466617</td>\n",
+              "      <td>50</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>3</th>\n",
+              "      <td>GPU</td>\n",
+              "      <td>0.573427</td>\n",
+              "      <td>50</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>4</th>\n",
+              "      <td>CPU</td>\n",
+              "      <td>0.002797</td>\n",
+              "      <td>128</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>5</th>\n",
+              "      <td>CPU(dot)</td>\n",
+              "      <td>1.428675</td>\n",
+              "      <td>128</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>6</th>\n",
+              "      <td>CPU(jit)</td>\n",
+              "      <td>0.002504</td>\n",
+              "      <td>128</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>7</th>\n",
+              "      <td>GPU</td>\n",
+              "      <td>0.005052</td>\n",
+              "      <td>128</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>8</th>\n",
+              "      <td>CPU</td>\n",
+              "      <td>0.013502</td>\n",
+              "      <td>500</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>9</th>\n",
+              "      <td>CPU(dot)</td>\n",
+              "      <td>79.690752</td>\n",
+              "      <td>500</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>10</th>\n",
+              "      <td>CPU(jit)</td>\n",
+              "      <td>0.181657</td>\n",
+              "      <td>500</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>11</th>\n",
+              "      <td>GPU</td>\n",
+              "      <td>0.064594</td>\n",
+              "      <td>500</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>"
+            ],
+            "text/plain": [
+              "        Name    Time(s)  Matrix size\n",
+              "0        CPU   0.004347           50\n",
+              "1   CPU(dot)   0.113307           50\n",
+              "2   CPU(jit)   0.466617           50\n",
+              "3        GPU   0.573427           50\n",
+              "4        CPU   0.002797          128\n",
+              "5   CPU(dot)   1.428675          128\n",
+              "6   CPU(jit)   0.002504          128\n",
+              "7        GPU   0.005052          128\n",
+              "8        CPU   0.013502          500\n",
+              "9   CPU(dot)  79.690752          500\n",
+              "10  CPU(jit)   0.181657          500\n",
+              "11       GPU   0.064594          500"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 12
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "KCfcxDLXhLfu",
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 142
+        },
+        "outputId": "63ab686e-9e83-4909-e31a-d62ed80b1a09"
+      },
+      "source": [
+        "acc = pd.DataFrame({'Acceleration (CPU/GPU)':[end3/end9, end4/end10, end5/end11], 'Acceleration (dot/GPU)':[end0/end9, end1/end10, end2/end11], 'Acceleration (jit/GPU)':[end6/end9, end7/end10, end8/end11]})\n",
+        "acc"
+      ],
+      "execution_count": 13,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/html": [
+              "<div>\n",
+              "<style scoped>\n",
+              "    .dataframe tbody tr th:only-of-type {\n",
+              "        vertical-align: middle;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe tbody tr th {\n",
+              "        vertical-align: top;\n",
+              "    }\n",
+              "\n",
+              "    .dataframe thead th {\n",
+              "        text-align: right;\n",
+              "    }\n",
+              "</style>\n",
+              "<table border=\"1\" class=\"dataframe\">\n",
+              "  <thead>\n",
+              "    <tr style=\"text-align: right;\">\n",
+              "      <th></th>\n",
+              "      <th>Acceleration (CPU/GPU)</th>\n",
+              "      <th>Acceleration (dot/GPU)</th>\n",
+              "      <th>Acceleration (jit/GPU)</th>\n",
+              "    </tr>\n",
+              "  </thead>\n",
+              "  <tbody>\n",
+              "    <tr>\n",
+              "      <th>0</th>\n",
+              "      <td>0.197595</td>\n",
+              "      <td>0.007581</td>\n",
+              "      <td>0.813735</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>1</th>\n",
+              "      <td>282.802303</td>\n",
+              "      <td>0.553589</td>\n",
+              "      <td>0.495635</td>\n",
+              "    </tr>\n",
+              "    <tr>\n",
+              "      <th>2</th>\n",
+              "      <td>1233.712422</td>\n",
+              "      <td>0.209022</td>\n",
+              "      <td>2.812271</td>\n",
+              "    </tr>\n",
+              "  </tbody>\n",
+              "</table>\n",
+              "</div>"
+            ],
+            "text/plain": [
+              "   Acceleration (CPU/GPU)  Acceleration (dot/GPU)  Acceleration (jit/GPU)\n",
+              "0                0.197595                0.007581                0.813735\n",
+              "1              282.802303                0.553589                0.495635\n",
+              "2             1233.712422                0.209022                2.812271"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 13
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "AitTeplXhtXb"
+      },
+      "source": [
+        "import matplotlib.pyplot as plt"
+      ],
+      "execution_count": 14,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "uVHFWctzOaFl",
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 296
+        },
+        "outputId": "34a9e675-958d-4848-e382-f8097b17e576"
+      },
+      "source": [
+        "plt.plot([N0, N1, N2], [end3, end4, end5], color = 'orange', label = 'CPU')\n",
+        "plt.plot([N0, N1, N2], [end0, end1, end2], color = 'green', label = 'CPU(dot)')\n",
+        "plt.plot([N0, N1, N2], [end6, end7, end8], color = 'red' , label = 'CPU(jit)')\n",
+        "plt.plot([N0, N1, N2], [end9, end10, end11], color = 'blue', label = 'GPU')\n",
+        "plt.rcParams['figure.facecolor'] = 'white'\n",
+        "plt.xlabel('Matrix size')\n",
+        "plt.ylabel('Time, s')\n",
+        "plt.legend()"
+      ],
+      "execution_count": 15,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "<matplotlib.legend.Legend at 0x7fc87dbfb490>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 15
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "image/png": "iVBORw0KGgoAAAANSUhEUgAAAX4AAAEGCAYAAABiq/5QAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEgAACxIB0t1+/AAAADh0RVh0U29mdHdhcmUAbWF0cGxvdGxpYiB2ZXJzaW9uMy4yLjIsIGh0dHA6Ly9tYXRwbG90bGliLm9yZy+WH4yJAAAgAElEQVR4nO3deZwU9ZnH8c/DnAgIgogIIoioiMgAI8qliIp4mwSvuAYTDXHXIxpNVnNoNG5E48YjyWaXeJF4B0WJiScCwnDIcF+KQEAHuQVEcZjr2T+qIMMwMwwzU1PT3d/369WvrvpVddXTBfN09a+rnp+5OyIikjqaxB2AiIg0LCV+EZEUo8QvIpJilPhFRFKMEr+ISIpJjzuAmjj00EO9c+fOcYchIpJQ5syZs9nd21ZsT4jE37lzZ/Lz8+MOQ0QkoZjZmsra1dUjIpJilPhFRFKMEr+ISIpJiD7+yhQXF1NQUEBhYWHcoSSc7OxsOnbsSEZGRtyhiEgMIk38ZnYrcB3gwCLgu0B74AWgDTAHuNrdiw502wUFBbRo0YLOnTtjZvUYdXJzd7Zs2UJBQQFdunSJOxwRiUFkXT1m1gG4Gch19xOBNOAK4AHgYXc/BtgKXFub7RcWFtKmTRsl/QNkZrRp00bflERSWNR9/OlAUzNLBw4C1gFDgXHh8rHAJbXduJJ+7ei4iaS2yBK/u68FHgI+IUj42wm6dra5e0m4WgHQobLXm9koM8s3s/xNmzZFFaaISOO08zOYcwuUFdf7pqPs6jkEuBjoAhwBNAOG1/T17j7G3XPdPbdt231uPGsU1q9fzxVXXEHXrl3p27cv5513HsuXL6dp06bk5ORwwgkncP3111NWVsbkyZO54IIL9nr9Nddcw7hx46rYuoikrA2T4c3esPJx2Law3jcf5Y+7ZwH/dPdNAGb2CjAQaGVm6eFZf0dgbYQxRMbd+cY3vsHIkSN54YUXAFiwYAEbNmyga9euzJ8/n5KSEoYOHcqrr75K69atY45YRBo9d1j2ICz4KbQ4Fs6cBC1PqPfdRNnH/wlwqpkdZEGn8pnAUmASMCJcZyTwWoQxRGbSpElkZGRw/fXX72nr1asXRx555J759PR0BgwYwIoVK+IIUUQSSdE2mPoNmH8HHDkCzvkgkqQPEZ7xu/ssMxsHzAVKgHnAGODvwAtmdl/Y9kSddzbnFtg6v86b2cshOdD3kSoXL168mL59+1a7iZ07dzJx4kTuvffe+o1NRJLL1vkwdQR8tQb6PgrH3gQRXoQR6XX87n43cHeF5lVAvyj3G7eVK1eSk5ODmXHxxRdz7rnnMmXKlErX1RU2Iilu5VOQ/x+Q2QbOmgJtB0S+y4S9c3cv1ZyZR6VHjx5V/jC7u4+/vDZt2rB169a92j7//HMOPfTQyGIUkUas5GuYcxOsfALaDYWBz0P2YQ2ya9XqqaWhQ4eya9cuxowZs6dt4cKFfPrpp5Wu361bNz777DOWLVsGwJo1a1iwYAE5OTkNEq+INCJfroJ3BgZJv8fP4Iy3GyzpQ7Kc8cfAzBg/fjy33HILDzzwANnZ2XTu3JlHHqn820dWVhbPPPMM3/3udyksLCQjI4PHH3+cli1bNnDkIhKrta/D9KuD6dP/Bh0uqH79CCjx18ERRxzBSy+9tE/74sWLK11/4MCBzJw5M+qwRKQxKiuFRXfBkl/DIX1g8DhoHk+9LCV+EZGoFW6EvCthw3vQ9fuQ+xikZccWjhK/iEiUNk2HaZdC0edw6lNw9DVxR6TELyISCXf46DGYdzs0OwqGzQjuD2oElPhFROpb8Q6YdR188hJ0vBhOfRoyW8Ud1R5K/CIi9WnbEpj2LdjxMeQ8AN1/HOlduLWhxC8iUl9WPwezvg8ZLWDoRGg3JO6IKqXELyJSV6VFMO82WP57aDsIBr0ETdvHHVWVdOduHdR3Pf4RI0awatWqffbz9NNPc+ONN1Yby6uvvsrSpUv3zN9+++289957dXyHIrJfX30K754WJP3jb4Mz32vUSR+U+Gttdz3+IUOGsHLlSubMmcP999+/Vz3+hQsXsnTpUl599dX9bm/JkiWUlpZy9NFH1yqeion/pptuYvTo0bXalojU0Lq3gwFTti+FQeOgz0PQJCPuqPYrKbp6bnnzFuavr9+yzDmH5/DI8KqLv1VVj3/16tV75svX4+/Xr/qCpM8++ywXX3zxnvmnnnqK+++/n1atWtGrVy+ysrIAWL16Nd/73vfYvHkzbdu25amnnqKgoIAJEyYwZcoU7rvvPl5++WW6du3Kli1bWL9+PYcffngtj4KIVMrLYPF9sOiX0LIHDH4ZDj427qhqTGf8tXQg9fh79uy53+3l5eXt2d66deu4++67ycvLY9q0afucyY8cOZKFCxdy1VVXcfPNNzNgwAAuuugifvOb3zB//ny6du0KQJ8+fcjLy6vDuxSRfezaApMvgEV3Q+er4JyZCZX0IUnO+Ks7M49Dberxr1u3jt1jC8+aNYshQ4bsmb/88stZvnw5ADNmzOCVV14B4Oqrr+YnP/lJlXEcdthhfPbZZ/X2vkRS3pbZwYAphevh5D/CMT9odJdq1kRkid/MjgNeLNd0NHAX8OewvTOwGrjM3bdWfH1jV9/1+Js2bUphYWG9xlhYWEjTpk3rdZsiKckdVoyBOTdD9uFw9jRoc3LcUdVaZF097v6Ru+e4ew7QF9gJjAfuACa6ezdgYjifcOq7Hn/37t33jM17yimnMGXKFLZs2UJxcTF//etf92xnwIABewZ3f/bZZxk8eDAALVq0YMeOHXvtc/ny5Zx44on19I5FUlTJTpgxEmZfHwyYcu7chE760HB9/GcCK919DXAxMDZsHwtc0kAx1Kvd9fjfffddunbtSo8ePbjzzjur/CG1fD3+nJwcRowYsVc9/vPPP5/JkycD0L59e375y1/Sv39/Bg4cSPfu3fds53e/+x1PPfUUJ510En/5y1949NFHAbjiiiv4zW9+Q+/evVm5ciXFxcWsWLGC3NzcaA+ESDL7Yjm8dQqsfgZ63gtD/g5ZbeKOqs7M3aPfidmTwFx3/72ZbXP3VmG7AVt3z1d4zShgFECnTp36rlmzZq/ly5Yt2yshJrqvv/6aM844g7y8PNLS0uq8vfHjxzN37lx+9atfVbo82Y6fSL379BWYcQ2kZcKA56D9sLgjOmBmNsfd9zn7i/yM38wygYuAv1Zc5sGnTqWfPO4+xt1z3T1394+cyaxp06bcc889rF27tl62V1JSwm233VYv2xJJKWXFMPd2mPotaNkdhs9NyKRfnYa4qudcgrP9DeH8BjNr7+7rzKw9sLEBYkgI55xzTr1t69JLL623bYmkjK/XwbTLYdNU6HYD9PlvSMuKO6p61xB9/FcCz5ebnwCMDKdHAq81QAwiItXbMAXe6A2fz4EBz8LJv0/KpA8RJ34zawacDbxSrnk0cLaZfQycFc6LiMTDHZY+CO+dGdTMP+cD6PztuKOKVKRdPe7+FdCmQtsWgqt8RETiVbQdZl4DBa9Cp0vhlCeCkspJTiUb6iDK6pznnXce27ZtA4Jr9yGo0/Pcc8/tWX/RokVcc801Eb9LkSS1dQG8mQtrX4c+D8PAF1Mi6YMSf61FXZ3zH//4B61aBVe5Tp8+Hdg38ffs2ZOCggI++eSTCN6hSBJb9TS8fSqU7oSzJsPxtyRk6YXaUuKvpaqqcx555JF75stX59yfitU5O3fuzObNmwFo3rw5AHfccQdTp04lJyeHhx9+GIALL7xwz528IrIfpYUwaxTM/C4cOgDOnQdtB8YdVYNLiiJt3HILzK/fsszk5MAjVRd/O5DqnPfee+9+d5eXl8eVV15Z7TqjR4/moYce4vXXX9/Tlpuby+jRo6st1iYiwJf/DAqsbZ0LPX4a3InbpO43Syai5Ej8jUxdq3MeCFXgFKmBtX+H6f8GOJw2ATpeGHdEsUqOxF/NmXlUGkt1TlXgFKlGWWlQN3/Jf8EhvWHwOGheu1Hukon6+GspyuqcVVEFTpEDULgJJp0TJP2u18LZeUr6ISX+WoqyOmf5fZR30kknkZaWRq9evfb8uDtp0iTOP//8+n+DIols04zgLtzNeXDKk3DK45Cub8a7NUh1zrrKzc31/Pz8vdqSrbpk+eqcEPTdr1+/noyMqgdu3rVrF6effjrTpk0jPf3Aeu2S7fiJAMFduMt/B3Nvg2adgrFwD8mJO6rYxFadU2qmfHXOHj16cN1111Wb9AE++eQTRo8efcBJXyQpFX8JeVfCnB/CEefB8DkpnfSro4zRiOyuzvnhhx/WaP1u3brRrVu3KEMSSQzblwZllHcsh5zR0P3HYDqvrYoSv4gkttUvwAfXQXozGPoutDsj7ogaPSV+EUlMpUUw7zZY/vvg7tuBL8FBR8QdVUJQ4heRxPPVpzDtMtgyE467FXo/AE2q/01M/kWJX0QSy/p3gx9xS3fBoL9CpxFxR5Rw9OtHHWzYsIFvf/vbHH300fTt25f+/fszfvx4Jk+eTMuWLcnJyaF79+7cc889ADz99NPceOONe21jyJAhVLxUVUQq4WWw+D54bxhkt4Phs5X0aynqEbhamdk4M/vQzJaZWX8za21m75jZx+HzIVHGEBV355JLLuG0005j1apVzJkzhxdeeIGCggIABg8ezPz588nPz+eZZ55h7ty5MUcsksB2fQ5TLoSFv4DOV8E5s+Dg4+KOKmFFfcb/KPCmux8P9AKWAXcAE929GzAxnE847733HpmZmXuVZT7qqKO46aab9lqvWbNm9O3bt0almUWkElvy4c0+sP4dOPl/oP+fgyt4pNYi6+M3s5bAacA1AO5eBBSZ2cXAkHC1scBk4D/rsq8YqjKzZMkS+vTps9/tbNmyhZkzZ/KLX/yC2bNn12OEIknOHVb+CfJvguzD4axpcGi/uKNKClGe8XcBNgFPmdk8M3s8HHy9nbuvC9dZD7Sr7MVmNsrM8s0sf9OmTRGGWT9uuOEGevXqxcknnwzA1KlT6d27N8OGDeOOO+6gR48e+9Te2a2qdpGUVbIzGCzlgx8E1+UPn6OkX4+ivKonHegD3OTus8zsUSp067i7m1mlxYLcfQwwBoJaPdXtKIaqzPTo0YOXX355z/wf/vAHNm/eTG5uUBZj8ODBew2YAvsvzSwiwBcfw7QRsG0R9Pwl9Ph5yg6YEpUoz/gLgAJ3nxXOjyP4INhgZu0BwueNEcYQmaFDh1JYWMgf//jHPW07d+6s9jUnn3wyeXl5rF+/HoD8/Hx27dq113CNIint0/HwVi7sLIAhb0DPu5X0IxDZGb+7rzezT83sOHf/CDgTWBo+RgKjw+fXooohSmbGq6++yq233sqDDz5I27ZtadasGQ888ECVr2nXrh2PPvoo5513HmVlZTRv3pznn3+eJk10Va2kuLISWPBTWPYbaH0yDP4rNDsq7qiSVqRlmc0sB3gcyARWAd8l+JbxEtAJWANc5u6fV7edVCjL3NB0/KTR+Hod5F0BG9+Hbv8BfX4LaVlxR5UUqirLHOmdu+4+H9hnpwRn/yKS6ja+D9Muh+IvoP8z0OWquCNKCepjEJGG5w7LHoKJQyHj4OCGLCX9BpPQtXrcXZdC1kIijLomSaxoe3CpZsF4OHIEnPpEkPylwSTsGX92djZbtmxREjtA7s6WLVvIzs6OOxRJRVsXwpu5sHZC0Jc/6CUl/Rgk7Bl/x44dKSgoIBFu7mpssrOz6dixY9xhSKpZ9WeYfT1ktoIzJ8Nhg+KOKGUlbOLPyMigS5cucYchIvtTWhiMg7tiTHAX7oDnoWmlN+xLA0nYxC8iCeDL1cFduJ/PgRPugJN+BU2UduKmfwERicbaf8CMfwvq6J/2GnS8KO6IJJSwP+6KSCNVVgoL74Ip58NBnYICa0r6jYrO+EWk/hRugulXBbXzj/4e5P4e0pvGHZVUoMQvIvVj80yYdmmQ/E95HLpeG3dEUgUlfhGpG3dY/nuYdxs07QjDZkDr3nFHJdVQ4heR2iv+Ej74Pqx5ATpcCP3HQmZCDqOdUpT4RaR2ti+Dqd+CHR9Br1/DCf8JputFEoESv4gcuDUvwqxrIe0gOOMdOHxo3BHJAVDiF5GaKy2CeT+G5Y/BoQOCWjsHdYg7KjlASvwiUjM7C2DaZbB5Bhx3C/R+EJpkxB2V1EKkid/MVgM7gFKgxN1zzaw18CLQGVhNMALX1qq2ISKNwPqJwShZpYUw8EU46rK4I5I6aIhfYs5w95xyw3/dAUx0927AxHBeRBojL4PF/wWThkH2YXDObCX9JBDHT/AXA2PD6bHAJTHEICL7U7QVplwEC38Ona6AYbOg5fFxRyX1IOrE78DbZjbHzEaFbe3cfV04vR6otD6rmY0ys3wzy1fNfZEG9vkceKMPrH8bcv8AA56BjOZxRyX1JOofdwe5+1ozOwx4x8w+LL/Q3d3MKh1Cy93HAGMAcnNzNcyWSENwh5WPQ/5NQdfOWVPh0FPijkrqWaRn/O6+NnzeCIwH+gEbzKw9QPi8McoYRKSGSnbCrO/BB6PgsNNh+Fwl/SQVWeI3s2Zm1mL3NDAMWAxMAEaGq40EXosqBhGpoR0r4O0BsGosnHgXDPkHZB8ad1QSkSi7etoB481s936ec/c3zWw28JKZXQusAXSJgEicPn0VZo4ESw8S/hHD445IIhZZ4nf3VUCvStq3AGdGtV8RqaGyEljwM1j2ILTOhcHjoNlRcUclDUB37oqkoq/XBzdkbZwCx1wPfR+BtKy4o5IGosQvkmo2Tg1KLxRvh/5/hi5Xxx2RNDDVUBVJFe6w7L9h4hmQ0QLOmaWkn6L2e8YfXpHztbuXmdmxwPHAG+5eHHl0IlI/irYHl2p++goc+U049SnIODjuqCQmNTnjfx/INrMOwNvA1cDTUQYlIvVo2yJ462QoeA16/zcMGqekn+JqkvjN3XcC3wT+x90vBXpEG5aI1It//gXeOgVKvoQzJ0H3H0FwibWksBolfjPrD1wF/D1sS4suJBGps9Jd8MG/w4zvQJt+wV24hw2OOyppJGpyVc8PgTuB8e6+xMyOBiZFG5aI1NqXq2HapfB5fjAO7kn3QRNdwCf/st//De7+PkE//+75VcDNUQYlIrX02Rsw/d/AS+G0V6HjxXFHJI2QLucUSQZlpbDwLph8PhzUEYbnK+lLlfT9TyTRFW6G6d+G9e/A0dcE9fPTD4o7KmnElPhFEtnmWUF/fuFG6Pcn6HqtrtqR/Trgrh4z+w8zu9zM9KEhEhd3WP4HeHcwWBoMmw7HXKekLzVSmz5+AwYBr9RzLCJSE8VfwvSrIP9GOHwYnDsXWveJOypJIAd81u7uf4giEBGpge0fwrRvwRcfQq//ghPuANM1GnJg9vs/xszamdkTZvZGOH9COIiKiDSkNS8FpRcKN8EZb0OPnyrpS63U5H/N08BbwBHh/HLglpruwMzSzGyemb0ezncxs1lmtsLMXjSzzAMNWiSllBXDnFsh73Jo1TPo2jlcYxlJ7dUk8R/q7i8BZQDuXgKUHsA+fggsKzf/APCwux8DbAX07UGkKjvXwrtD4KNH4LgfwpmTg+v0ReqgJon/KzNrAziAmZ0KbK/Jxs2sI3A+8Hg4b8BQYFy4yljgkgOMWSQ1rJ8Ib/SGbQtg4IvhKFn6gix1V5Mfd38ETAC6mlke0BYYUcPtPwL8BGgRzrcBtoXfGgAKgA6VvdDMRgGjADp16lTD3YkkAS+DpQ/Awp9Di+Ng8MvQsnvcUUkSqUmtnrlmdjpwHMGlnB/VZBAWM7sA2Ojuc8xsyIEG5u5jgDEAubm5fqCvF0lIRVth+nfgs9fhqCuh3xjIaB53VJJkajICVxpwHtA5XH+YmeHuv93PSwcCF5nZeUA2cDDwKNDKzNLDs/6OwNo6xC+SPD6fB1O/BV8XQN/fwbE36IYsiURN+vj/BlxD0E3TotyjWu5+p7t3dPfOwBXAe+5+FUFJ591dRSOB1w48bJEks/IJeLs/eDGc9T4cd6OSvkSmJn38Hd39pHrc538CL5jZfcA84Il63LZIYin5GvJvgFVPweFnwYDnILtt3FFJkqtJ4n/DzIa5+9u13Ym7TwYmh9OrgH613ZZI0tixMuja2bYATvwFnHg3NNHgdhK9miT+mcB4M2sCFBP8wOvurtGaRWqr4DWYMTK48/b0v0OH8+KOSFJITRL/b4H+wCJ319U1InVRVhJcprn0AWjdFwaNg+ad445KUkxNEv+nwGIlfZE6+noD5F0BGyfDMT8Ib8jKjjsqSUE1SfyrgMlhkbZduxtrcDmniOy2cRrkXQZF2+DUsXD0d+KOSFJYTRL/P8NHZvgQkZpyD+rszPsxNOsCw96EQ+rzIjmRA1eTO3fvaYhARJJO8Rcw81r4dBx0/Aac+hRktow7KpGqE7+Z/d7dbzSzvxEWaCvP3S+KNDKRRLZtcXCp5pcrofdDcPyPdEOWNBrVnfF/B7gReKiBYhFJDv98Bj74AWQcDGe+B4edFndEInupLvGvBHD3KQ0Ui0hiK90Fc2+Fj/8YJPuBL0DT9nFHJbKP6hJ/WzP7UVULdVWPSDlfrYGpl8Lns6H7j6HXr6HJAQ9pLdIgqvufmQY0J7hTV0Sq8tmbMP0q8BIY/Aoc+Y24IxKpVnWJf52739tgkYgkmrJSWPwrWHxvMBbuoHFwcLe4oxLZr+oSv870RapSuDk4y1//NnT5Dpz8R0g/KO6oRGqkusR/ZoNFIZJINn8A00ZA4Qbo93/Q9fu6VFMSSpWJ390/b8hARBo99+CKnbm3QNMOMGx6UGhNJMHUZASuWjGzbDP7wMwWmNkSM7snbO9iZrPMbIWZvWhmKgMhjV/JVzDj6mDQlMPPhuFzlPQlYUWW+AkKug11915ADjDczE4FHgAedvdjgK3AtRHGIFJ3X3wEb50Cq5+Dk+6D0/8GWa3jjkqk1iJL/B74MpzNCB8ODAXGhe1jgUuiikGkzj4ZB2/mBv35Z7wFJ/4sGDxFJIFF+j/YzNLMbD6wEXiH4G7gbe5eEq5SAHSIMgaRWikrhjk/gmmXQssTYfhcaH923FGJ1ItIby1091Igx8xaAeOB42v6WjMbBYwC6NSpUzQBilRm51rIuxw25cGxNwVF1tL0U5Qkjwb5zuru24BJBEM4tjKz3R84HYG1VbxmjLvnuntu27ZtGyJMEdgwCd7sA1vnw4DnIfcxJX1JOlFe1dM2PNPHzJoCZwPLCD4ARoSrjQReiyoGkRrzMlgyGt47CzJbwzmzofMVcUclEokou3raA2PNLI3gA+Yld3/dzJYCL5jZfcA84IkIYxDZv6KtMGMkrP0bdLocTvkTZLSIOyqRyESW+N19IdC7kvZVQL+o9ityQLbODwZM+eoT6PsYHHuj7sKVpKe6sZK6Vj4Z3JCV2QbOeh/a9o87IpEGocQvqafka8i/EVY9Ce3OhIHPQ7YuIJDUocQvqeXLVUHXztb50ONn0PMeaJIWd1QiDUqJX1JHwd+CejvWBE5/HTqcH3dEIrHQveeS/MpKYP5P4f2LoHnXoMCakr6kMJ3xS3L7egNMvzK4MeuYUdD3UUjLjjsqkVgp8Uvy2pQH0y6Dos/h1Kfg6GvijkikUVDil+TjDh89AvN+As2OgmEz4ZBecUcl0mgo8UtyKd4BM78Hn46DjpcEZ/qZreKOSqRRUeKX5LFtCUz7FuxYATkPQvfbdReuSCWU+CU5/PNZ+GBUUGNn6ERod3rcEYk0Wkr8kthKd8HcH8HH/wNtB8OgF6Fp+7ijEmnUlPglcX31STBC1pYPgm6dXr+GJhlxRyXS6CnxS2L67C2YcRWUFsHgl+HIb8YdkUjC0J27kli8DBbdC5PPhaZHwPB8JX2RA6Qzfkkcu7bA9H+DdW9C56uh3/9C+kFxRyWScKIcevFIM5tkZkvNbImZ/TBsb21m75jZx+HzIVHFIElky2x4ow9seA9O/l/oP1ZJX6SWouzqKQFuc/cTgFOBG8zsBOAOYKK7dwMmhvMilXOHj/8X3hkUXJN/dh50+4Guzxepg8gSv7uvc/e54fQOgoHWOwAXA2PD1cYCl0QVgyS4kq9gxndg9r8HA6YMnwNtcuOOSiThNUgfv5l1Jhh/dxbQzt3XhYvWA+2qeM0oYBRAp06dog9SGpcvlgcDpmxfAj3vhRN/FtTRF5E6i/wvycyaAy8Dt7j7F+WXubsDXtnr3H2Mu+e6e27bthoWL6V88jK8mQuF6+CMt6DnL5T0RepRpH9NZpZBkPSfdfdXwuYNZtY+XN4e2BhlDJJAyoph7m0wbQS0PAGGz4X2Z8cdlUjSifKqHgOeAJa5+2/LLZoAjAynRwKvRRWDJJCdn8HEofDhb+HYG+Gs96GZuvhEohBlH/9A4GpgkZnND9t+CowGXjKza4E1wGURxiCJYMNkyLsiKKk84DnofGXcEYkktcgSv7tPA6q65u7MqPYrCcQdlj0IC34KLboFVTVb9Yg7KpGkpzt3JR5F22DmNVDwGnS6DE55PCipLCKRU+KXhrd1PkwdAV+tgT6PwHE364YskQakxC8Na9XTwQ1Zma3hrCnQdkDcEYmkHCV+aRilhZB/E6x8HNoNhYHPQ/ZhcUclkpKU+CV6X64Kuna2zoMePw3uxG2SFndUIilLiV+itfZ1mH51MH3aBOh4YbzxiIgGYpGIlJXCgp/BlAuheRc4d46SvkgjoTN+qX+FGyHv27BhInS9DnJ/B2nZcUclIiElfqlfm6bDtMugaAuc8iR0/W7cEYlIBUr8Uj/c4aPHYN7tQY2dYTPgkJy4oxKRSijxS90V74BZ18EnL0GHi4JhETNbxR2ViFRBiV/qZvtSmPpN2PEx5IyG7j9W7XyRRk6JX2pv9fPwwfchvXlQYK3dkLgjEpEaUOKXA1daBPNug+W/h7aDYOCLcNARcUclIjWkxC8H5qtPYdqlsGUWHP+joHunSUbcUYnIAVDil5pb9zZM/3Zwxj/or9BpRNwRiUgtRDn04pNmttHMFpdra21m75jZx+HzIVHtX+qRl8GiX8Gk4ZDdHobnK+mLJLAoL794Ghheoe0OYKK7dwMmhvPSmO3aApMvgEV3Qeer4HFFa+QAAAxpSURBVJyZcPCxcUclInUQWeJ39/eBzys0XwyMDafHApdEtX+pB1vy4c2+QemFk/8I/f8M6c3ijkpE6qihL7hu5+7rwun1QLuqVjSzUWaWb2b5mzZtapjoJOAOH/8fvDMwmD57GnS7XqNkiSSJ2O60cXcHvJrlY9w9191z27Zt24CRpbiSncFYuLOvDwZMOXcutDk57qhEpB419FU9G8ysvbuvM7P2wMYG3r9U54uPYdq3YNti6HkPnPhz3YUrkoQa+q96AjAynB4JvNbA+5eqfPoKvJULO9fCkDeg511K+iJJKsrLOZ8HZgDHmVmBmV0LjAbONrOPgbPCeYlTWTHMvR2mfgsOPh7OnQdHnBN3VCISoci6etz9yioWnRnVPuUAfb0Opl0Om6ZCt/+APr+FtKy4oxKRiOnO3VS1YQrkXR6UVB7wLHT+dtwRiUgDUSduqnGHpb+B984Mauaf84GSvkiK0Rl/KinaHlyqWfAqHDkCTn0SMlrEHZWINDAl/lSxdQFMHQFfrYY+D8NxP9QNWSIpSok/Fax6Gmb/O2S2hrMmQ9uBcUckIjFS4k9mpYWQfzOs/BO0OwMGPA9Nq6ySISIpQok/WX35z6BrZ+tcOOFOOOleaKJ/bhFR4k9Oa/8OM64O6uifNgE6Xhh3RCLSiOhyzmRSVgoLfg5TLoBmR8HwOUr6IrIPnfEni8JNkHdlUDu/67XQ93eQ3jTuqESkEVLiTwabZgQDoBdtgVOegK7fizsiEWnElPgTmTss/x3MvQ2adYKzp0Pr3nFHJSKNnBJ/oir+EmZdB5+8CB0uhP5jIVNj14vI/inxJ6LtS4MyyjuWQ6/74YSfqHa+iNSYEn9j5Q4lX0HxNigKH8XbYcfHsPDnwaDnQ98NbswSETkASvxR8bKg5HFxuaS9J4FXSOZ7zZdb10sr33bbgTDwRTioQ8O+JxFJCrEkfjMbDjwKpAGPu3skI3EtWADbt0NW1t6PzMx95/epV1ZWWi4pV5Kcyyfziol893PVY8kH0ptBRqugPHJmK2h6eDAK1u753csyWu493+IYde2ISK01eOI3szTgD8DZQAEw28wmuPvS+t7XnWd/wBub+tVo3UzbRaYVkWW7yGpS8VFEZlo6WWktyGqSSVZ6S7LSDicrvYTMjFKyMsuCRxZkZUJWUyMzK42spunB46BMspplkdW8KVnNmpLZogVZLQ4iq2k2Wc3S9zwyD0onq0UmWQelkZVtpKXV9xGROnGv2XMyr9uYYkm0dWu7/UGDoHlz6lMcZ/z9gBXuvgrAzF4ALgbqPfH3H3Arx63Kxkuz8JKs4Lk0i9KSLLw0k7KyLEpLsykty6K0LIuSsizKyjIpCaeLS7MoKcmiuCyLYs/gS2/K57SiyLMoIotdZFFEJrvC6V1kUVqPhzSNErLYRQZF4QfTLjKsiCaUVbq+s/fXlvJz7pWXYK7+O0nVZZsdq/TFu2Oo7JUV46uqvSZx13p7+3tPB9DekNurXQzWqN9TY99eY4gB4J3nZzD0ikFVLq+NOBJ/B+DTcvMFwCkVVzKzUcAogE6dOtVqRxmjjuOzjUugSRE0KYQmGdAkM3i29Crr0aeFj+pGn7UyJ620jPSSMtJKguf0UqdJEVhhGhQ1wQrT8F3psCsNdqXjRcGD4jS8KJ2yonS8OJ2yogxKS8LpkgxKizMoLQnaSksyKC0NHiUlmZSUZlT7nwSrIpXbvxJgxTUsfE1lr9x9iGrzmt32rGNBKqpsWZWvKbevfbdnGH5Ace+OwSu0lZ+s/LPGKw9097Iqc69TcaGz73tiT7y21zFy22eVffYV7MHxKv4/m1V+jPaJba+Xl1tW4ViWj33ff9sqXkNVx3V3HOx1bHe/p4qxeYX5yrdX+Wus0n+n3fFWHUOV+6wkhor/n/d5z5W9Zs8h8wqvCSbantR/3xfVUaP9cdfdxwBjAHJzc/fTWV65O857sl5jEhFJBnH8QrgWOLLcfMewTUREGkAciX820M3MuphZJnAFMCGGOEREUlKDd/W4e4mZ3Qi8RdCV/qS7L2noOEREUlUsffzu/g/gH3HsW0Qk1ekuIBGRFKPELyKSYpT4RURSjBK/iEiKMfda3RvVoMxsE7Am7jjq6FBgc9xBNBI6FnvT8dibjse/1PVYHOXubSs2JkTiTwZmlu/uuXHH0RjoWOxNx2NvOh7/EtWxUFePiEiKUeIXEUkxSvwNZ0zcATQiOhZ70/HYm47Hv0RyLNTHLyKSYnTGLyKSYpT4RURSjBJ/PTGzJ81so5ktLtfW2szeMbOPw+dDwnYzs8fMbIWZLTSzPvFFXv/M7Egzm2RmS81siZn9MGxPueNhZtlm9oGZLQiPxT1hexczmxW+5xfDEuWYWVY4vyJc3jnO+KNiZmlmNs/MXg/nU/Z4mNlqM1tkZvPNLD9si/RvRYm//jwNDK/Qdgcw0d27ARPDeYBzgW7hYxTwxwaKsaGUALe5+wnAqcANZnYCqXk8dgFD3b0XkAMMN7NTgQeAh939GGArcG24/rXA1rD94XC9ZPRDYFm5+VQ/Hme4e065a/aj/Vtxdz3q6QF0BhaXm/8IaB9Otwc+Cqf/D7iysvWS8QG8Bpyd6scDOAiYSzDG9GYgPWzvD7wVTr8F9A+n08P1LO7Y6/k4dAyT2VDgdYLBZVP5eKwGDq3QFunfis74o9XO3deF0+uBduF0ZQPOd2jIwBpK+NW8NzCLFD0eYbfGfGAj8A6wEtjm7iXhKuXf755jES7fDrRp2Igj9wjwE6AsnG9Dah8PB942szlmNipsi/RvpdEOtp5s3N3NLKWunTWz5sDLwC3u/oWZ7VmWSsfD3UuBHDNrBYwHjo85pNiY2QXARnefY2ZD4o6nkRjk7mvN7DDgHTP7sPzCKP5WdMYfrQ1m1h4gfN4Ytif9gPNmlkGQ9J9191fC5pQ9HgDuvg2YRNCV0crMdp94lX+/e45FuLwlsKWBQ43SQOAiM1sNvEDQ3fMoqXs8cPe14fNGghODfkT8t6LEH60JwMhweiRBX/fu9u+Ev9CfCmwv97Uu4Vlwav8EsMzdf1tuUcodDzNrG57pY2ZNCX7rWEbwATAiXK3isdh9jEYA73nYmZsM3P1Od+/o7p2BKwje31Wk6PEws2Zm1mL3NDAMWEzUfytx/7CRLA/geWAdUEzQ73YtQV/kROBj4F2gdbiuAX8g6OtdBOTGHX89H4tBBP2WC4H54eO8VDwewEnAvPBYLAbuCtuPBj4AVgB/BbLC9uxwfkW4/Oi430OEx2YI8HoqH4/wfS8IH0uAn4Xtkf6tqGSDiEiKUVePiEiKUeIXEUkxSvwiIilGiV9EJMUo8YuIpBglfklKZuZm9ky5+XQz27S7GmQ1r8sxs/OqWZ5rZo/VMbYjzGxcXbYhUhdK/JKsvgJODG+aguDGqZrc4ZhDcM/BPsws3d3z3f3mugTm7p+5+4j9rykSDSV+SWb/AM4Pp68kuMkOADPrZ2Yzwprw083suLAG/L3A5WFt9MvN7Jdm9hczywP+YmZDytWQf9TM7gqnzzGz981sr78pMzs93Nb8cF8tzKyzheM2mNnj5ZZvMrO7w/Yfm9nssOb6PVEfKEktSvySzF4ArjCzbII7aGeVW/YhMNjdewN3Ab9296Jw+kUPaqO/GK57AnCWu19ZYft3EnxInAE8BnzX3csqrHM7cIO75wCDga/LL3T368JlFxOUHH7azIYR1FvvR/ANpK+ZnVb7wyCyN1XnlKTl7gvDstBXEpz9l9cSGGtm3QjKS2RUs6kJ7v51xUZ332lm3wfeB25195WVvDYP+K2ZPQu84u4F5auUQjBKF0FZgpvcfY2Z3URQs2VeuEpzgg+C96t7vyI1pcQvyW4C8BBBXZjyddx/BUxy92+EHw6Tq9nGV9Us60lQLfKIyha6+2gz+zvB7wZ5ZnYOUFhhtf8l+FB4N5w34H53/79q9itSa+rqkWT3JHCPuy+q0N6Sf/3Ye0259h1Ai5ps2MyOAm4jGGjmXDM7pZJ1urr7Ind/AJhNhVr8ZnYD0MLdR5drfgv4XjieAWbWIazVLlIvlPglqbl7gbtXdvnlg8D9ZjaPvb/5TgJO2P3jblXbLVd6+nZ3/4ygGuvjYbdNebeY2WIzW0hQufWNCstvB3qW+4H3end/G3gOmGFmi4Bx1PDDSKQmVJ1TRCTF6IxfRCTFKPGLiKQYJX4RkRSjxC8ikmKU+EVEUowSv4hIilHiFxFJMf8PchDsEdTN8voAAAAASUVORK5CYII=\n",
+            "text/plain": [
+              "<Figure size 432x288 with 1 Axes>"
+            ]
+          },
+          "metadata": {
+            "needs_background": "light"
+          }
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "aomVAWrlPvse"
+      },
+      "source": [
+        ""
+      ],
+      "execution_count": 15,
+      "outputs": []
+    }
+  ]
+}
