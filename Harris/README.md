@@ -11,7 +11,7 @@
 + блок кода, который выполнял алгоритм Харриса на CPU с помощью библиотеки ```OpenCV```;
 + блок кода, который выполнял алгоритм Харриса на GPU с помощью библиотеки ```PyCUDA```. <br/>
 <br/>
-В качестве исходного изображения для детекции было выбрано следующее изображение: <br/>
+В качестве исходного изображения для детекции было выбрано следующее изображение:
 
 ![Chess](https://drive.google.com/uc?export=view&id=1Msl1dr6bABZ2k-Vjo7e0RW76YIwuyqu8)
 
@@ -23,7 +23,7 @@
 <br/>
 
 Алгоритм на GPU, выполненный с помощью ```PyCUDA```, выдал ожидаемый результат, но быстрее по времени:
-![GPU](https://drive.google.com/uc?export=view&id=1_SNpWJS3n7ZFOSxfy75U0RQMSGVIfrsf)
+<img src="https://drive.google.com/uc?export=view&id=1_SNpWJS3n7ZFOSxfy75U0RQMSGVIfrsf" width="800">
 
 ## **Результаты выполнения**
 Расчет на CPU, сек | Расчет на GPU, сек  | Ускорение
