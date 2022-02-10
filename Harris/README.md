@@ -23,7 +23,7 @@
 <br/>
 
 Алгоритм на GPU, выполненный с помощью ```PyCUDA```, выдал ожидаемый результат, но быстрее по времени:
-<img src="https://drive.google.com/uc?export=view&id=1_SNpWJS3n7ZFOSxfy75U0RQMSGVIfrsf" width="800">
+<img src="https://drive.google.com/uc?export=view&id=1JFFRgQeeg0n7dl4KiRwMkhXkkEQDoEV2" width="800">
 
 ## **Результаты выполнения**
 Расчет на CPU, сек | Расчет на GPU, сек  | Ускорение
